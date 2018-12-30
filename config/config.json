@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "gsrv-directory-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/gsrvDirectory/GsrvDirectoryWebPart.js",
+          "manifest": "./src/webparts/gsrvDirectory/GsrvDirectoryWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "GsrvDirectoryWebPartStrings": "lib/webparts/gsrvDirectory/loc/{locale}.js"
+  }
+}

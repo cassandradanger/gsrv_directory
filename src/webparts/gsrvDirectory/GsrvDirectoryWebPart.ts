@@ -1,4 +1,5 @@
 import { Version } from '@microsoft/sp-core-library';
+import { sp } from "@pnp/sp";
 import {
   BaseClientSideWebPart,
   IPropertyPaneConfiguration,
@@ -6,7 +7,8 @@ import {
 } from '@microsoft/sp-webpart-base';
 import { escape } from '@microsoft/sp-lodash-subset';
 import {  
-  SPHttpClient  
+  SPHttpClient,
+  SPHttpClientResponse
 } from '@microsoft/sp-http';  
 
 import styles from './GsrvDirectoryWebPart.module.scss';
@@ -16,25 +18,27 @@ export interface IGsrvDirectoryWebPartProps {
   description: string;
 }
 export interface ISPLists {
-  value: ISPList[];  
-}
+  value: ISPList[];
+ }
 
-export interface ISPList{
-  Title: string;
-  Employee_x0020_Birthday: string;
-  Employee_x0020_Anniversary: string;
-  Birth_x0020_Day: string;
-  Birth_x0020_Month: string;
-  AnniversaryYear: number;
-  AnniversaryMonth: number;
-  Email: string;
-}
+export interface ISPList {
+  Title:string; 
+  Name:string;
+  EMail:string;
+  MobilePhone:string;
+  Notes:string;
+  SipAddress:string;
+  Picture:string;
+  Department:string;
+  JobTitle:string;
+  FirstName:string;
+  LastName:string;
+  WorkPhone:string;
+  UserName:string;
+  Id: string;
+ }
 
-var today = new Date();
-var currentMonth = today.getMonth() +1;
-var currentYear = today.getFullYear();
-
-var date = new Date(); date.setDate(date.getDate() + 7); 
+ var userDept = "";
 
 export default class GsrvDirectoryWebPart extends BaseClientSideWebPart<IGsrvDirectoryWebPartProps> {
 
@@ -45,51 +49,55 @@ export default class GsrvDirectoryWebPart extends BaseClientSideWebPart<IGsrvDir
         <div id="spListContainer" /></div>
       </ul>
     </div>`;
-      this._firstGetList();
   }
 
-  private _firstGetList() {
-    this.context.spHttpClient.get('https://girlscoutsrv.sharepoint.com' + 
-      `/_api/web/Lists/GetByTitle('Staff Events')/Items?$filter=((Birth_x0020_Month eq ` + currentMonth + `) or (AnniversaryMonth eq ` + currentMonth + '))', SPHttpClient.configurations.v1)
-      .then((response)=>{
-        response.json().then((data)=>{
-          this._renderList(data.value)
-        })
+  getuser = new Promise((resolve,reject) => {
+    // SharePoint PnP Rest Call to get the User Profile Properties
+    return sp.profiles.myProperties.get().then(function(result) {
+      var props = result.UserProfileProperties;
+      var propValue = "";
+      var userDepartment = "";
+  
+      props.forEach(function(prop) {
+        //this call returns key/value pairs so we need to look for the Dept Key
+        if(prop.Key == "Department"){
+          // set our global var for the users Dept.
+          userDept += prop.Value;
+        }
       });
-    }
+      return result;
+    }).then((result) =>{
+      this._getListData().then((response) =>{
+        this._renderList(response.value);
+      });
+    });
+  });
+
+  public _getListData(): Promise<ISPLists> {  
+    // hidden user list for the people web part
+    return this.context.spHttpClient.get(`https://girlscoutsrv.sharepoint.com/_api/web/lists/getbytitle('User Information List')/items?$filter=Department eq'`+ userDept +`'`, SPHttpClient.configurations.v1)
+     .then((response: SPHttpClientResponse) => {
+       return response.json();
+    });
+  }
+
+
+
   
   private _renderList(items: ISPList[]): void {
+    console.log(items);
     let html: string = ``;
     items.forEach((item: ISPList) => {
-      item.Title = item.Title.toLowerCase();
-
-      var indexOfComma = item.Title.indexOf(',');
-      var firstName = item.Title.slice(indexOfComma + 2, item.Title.length);
-      firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
-      var indexOfMiddleName = firstName.indexOf(' ');
-      if( indexOfMiddleName !== -1){
-        firstName = firstName.slice(0, indexOfMiddleName);
-      }
-
-      var lastName = item.Title.slice(0, indexOfComma);
-      lastName = lastName.charAt(0).toUpperCase() + lastName.slice(1);
-
-      var indexOf2ndLastName = lastName.indexOf(' ');
-      if(indexOf2ndLastName !== -1){
-        var firstLast = lastName.slice(0,indexOf2ndLastName);
-        var secondLast = lastName.slice(indexOf2ndLastName, lastName.length);
-        secondLast = secondLast.charAt(1).toUpperCase() + secondLast.slice(2);
-        lastName = firstLast + " " + secondLast
-      }
+      let extension = item.WorkPhone ? item.WorkPhone.slice(item.WorkPhone.length - 4, item.WorkPhone.length ) : '0000';
       html += `  
         <li class=${styles.liDI}>
           <div class=${styles.imageDI}>
-            <img class=${styles.imgDI} src="/_layouts/15/userphoto.aspx?size=L&username=${item.Email}"/>
+            <img class=${styles.imgDI} src="/_layouts/15/userphoto.aspx?size=L&username=${item.EMail}"/>
           </div>
           <div class=${styles.personWrapperDI}>
-            <span class=${styles.nameDI}>${firstName} ${lastName}</span>
-            <p class=${styles.positionDI}>{position}</p>
-            <p class=${styles.extensionDI}>{extension}</p>
+            <span class=${styles.nameDI}>${item.Title}</span>
+            <p class=${styles.positionDI}>${item.JobTitle}</p>
+            <p class=${styles.extensionDI}>Ext. ${extension}</p>
           </div>
         </li>
         <div class=${styles.vertLineDI}></div>
@@ -102,7 +110,13 @@ export default class GsrvDirectoryWebPart extends BaseClientSideWebPart<IGsrvDir
   protected get dataVersion(): Version {
     return Version.parse('1.0');
   }
-
+  public onInit():Promise<void> {
+    return super.onInit().then (_=> {
+      sp.setup({
+        spfxContext:this.context
+      });
+    });
+  }
   protected getPropertyPaneConfiguration(): IPropertyPaneConfiguration {
     return {
       pages: [
